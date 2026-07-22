@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>🍮 푸딩 라이선스 실시간 차단 관리자 Center</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #f4f6f9; padding: 40px 20px; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 950px; }
+        .card { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); margin-bottom: 25px; }
+        .form-group { display: flex; gap: 12px; }
+        input[type="text"] { flex: 1; padding: 14px; border: 1px solid #ddd; border-radius: 10px; font-size: 15px; }
+        button { padding: 14px 24px; background: #ff9f43; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        button:hover { background: #e67e22; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 10px; }
+        th { background: #fff8ec; color: #d97706; padding: 12px; text-align: left; border-bottom: 2px solid #f4b860; }
+        td { padding: 12px; border-bottom: 1px solid #eee; }
+        .code-badge { font-family: monospace; background: #e6fcf5; color: #0ca678; padding: 4px 8px; border-radius: 6px; font-weight: bold; }
+        .btn-copy { background: #27c93f; padding: 6px 12px; border-radius: 6px; color: white; border:none; cursor:pointer;}
+        .btn-delete { background: #ff5f56; padding: 6px 12px; border-radius: 6px; color: white; border:none; cursor:pointer;}
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 style="color:#d97706; text-align:center;">🍮 푸딩 실시간 차단 연동 라이선스 센터</h2>
+
+    <div class="card">
+        <h3>➕ 신규 구매자 라이선스 발급</h3>
+        <div class="form-group">
+            <input type="text" id="buyerInput" placeholder="구매자 성함 (동명이인 자동 번호부여)">
+            <button onclick="generateLicense()">🚀 라이선스 즉시 발급</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>📜 보유 라이선스 목록 (삭제 시 실시간 차단)</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>구매자</th>
+                    <th>발급 일시</th>
+                    <th>라이선스 키</th>
+                    <th style="text-align:center;">관리</th>
+                </tr>
+            </thead>
+            <tbody id="licenseTableBody">
+                <tr><td colspan="4" style="text-align:center;">데이터 로딩 중...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<textarea id="hiddenArea" style="display:none;"></textarea>
+
+<script>
+// ⚠️ 발급받으신 2개 키를 넣어주세요!
+const JSONBIN_KEY = "$2a$10$DfYID08mgpZiaE1025C5kugvnH/xz68pLrVrq1sR39Kookrz4ITqu "; // Master Key ($2a$10$...)
+const BIN_ID = "6a60c3d0da38895dfe7f75bb";           // Bin ID (65a...)
+
+const API_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+
+// DB 가져오기
+async function getDB() {
+    try {
+        const res = await fetch(API_URL, { headers: { "X-Master-Key": JSONBIN_KEY } });
+        const data = await res.json();
+        return Array.isArray(data.record) ? data.record : [];
+    } catch(e) { return []; }
+}
+
+// DB 저장하기
+async function saveDB(data) {
+    await fetch(API_URL, {
+        method: 'PUT',
+        headers: { "Content-Type": "application/json", "X-Master-Key": JSONBIN_KEY },
+        body: JSON.stringify(data)
+    });
+}
+
+// 🎯 [실시간 차단 기능 + macOS 신호등 풀버전 스크립트 템플릿]
+const SCRIPT_TEMPLATE = `// ==UserScript==
+// @name         티켓링크스포츠 푸딩 (macOS 신호등 버튼 + DB 실시간 차단 탑재판)
+// @namespace    http://tampermonkey.net
+// @version      3.0
+// @description  실시간 DB 연동 정품 인증 + macOS 스타일 컨트롤러 스니퍼
+// @match        *://*.ticketlink.co.kr/*
+// @match        *://facility.ticketlink.co.kr/*
+// @grant        GM_xmlhttpRequest
+// @run-at       document-end
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    const BIN_ID = "${BIN_ID}";
+    const JSONBIN_KEY = "${JSONBIN_KEY}";
+    
+    const LICENSE_USER = "__LICENSE_USER__";
+    const ACCESS_KEY   = "__ACCESS_KEY__";
+
+    const STORAGE_NAME = 'pudding_user_name_ls';
+    const STORAGE_KEY  = 'pudding_user_key_ls';
+
+    // 🌐 DB 실시간 검증 (삭제된 유저 실시간 차단)
+    function checkLiveLicense(name, key, callback) {
+        GM_xmlhttpRequest({
+            method: "GET",
+            url: "https://api.jsonbin.io/v3/b/" + BIN_ID + "/latest",
+            headers: { "X-Master-Key": JSONBIN_KEY },
+            onload: function(res) {
+                try {
+                    const data = JSON.parse(res.responseText);
+                    const list = data.record || [];
+                    const found = list.find(item => item.name === name && item.key === key);
+                    callback(!!found);
+                } catch(e) { callback(false); }
+            },
+            onerror: function() { callback(false); }
+        });
+    }
+
+    // 🔒 로그아웃 / 차단 처리
+    window.__puddingLogout = function (isBlocked = false) {
+        try {
+            localStorage.removeItem(STORAGE_NAME);
+            localStorage.removeItem(STORAGE_KEY);
+        } catch (e) {}
+        if (isBlocked) {
+            alert("❌ [푸딩 차단] 관리자에 의해 라이선스가 무효화되었습니다. 프로그램이 영구 중지됩니다.");
+        } else {
+            alert("🔒 [푸딩 알림] 라이선스 로그아웃 완료! 페이지를 다시 로드합니다.");
+        }
+        location.reload();
+    };
+
+    function showLicenseStatusBadge(clientName) {
+        if (document.getElementById('pudding-license-badge')) return;
+
+        const badge = document.createElement('div');
+        badge.id = 'pudding-license-badge';
+
+        const currentUrl = window.location.href;
+        const isInsidePopup = (window.name && window.name.includes('Popup')) || (window.opener && window.opener !== window);
+        if (isInsidePopup && (currentUrl.includes('/reserve/') || currentUrl.includes('menuIndex=reserve'))) return;
+
+        badge.style.cssText = 'position:fixed;top:10px;right:20px;z-index:2147483647;background:linear-gradient(135deg, #ff9f43, #e67e22);color:#fff;padding:10px 18px;border-radius:10px;font:600 12px -apple-system,Pretendard,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.25);display:flex;align-items:center;gap:10px;';
+        badge.innerHTML = \`
+            <span>✅ 정품 인증 유저: <b style="text-decoration:underline;">\${clientName}</b></span>
+            <button id="p_badge_logout" style="padding:2px 8px; background:#fff; border:none; border-radius:4px; font-size:10px; font-weight:bold; cursor:pointer; color:#e67e22;">로그아웃</button>
+        \`;
+
+        document.body.appendChild(badge);
+
+        document.getElementById('p_badge_logout').onclick = function () {
+            if (confirm("푸딩대리티켓팅 라이선스를 로그아웃 하시겠습니까?")) {
+                window.__puddingLogout(false);
+            }
+        };
+    }
+
+    function showLoginModal() {
+        if (document.getElementById('pudding-login-overlay')) return;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'pudding-login-overlay';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.65);display:flex;justify-content:center;align-items:center;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;';
+        overlay.innerHTML = \`
+            <div style="width:360px; background:#fff; border-radius:16px; box-shadow:0 15px 35px rgba(0,0,0,0.3); overflow:hidden;">
+                <div style="text-align:center; padding:24px; background:#FFD9A0; border-bottom:1px solid #f4b860;">
+                    <div style="font-size:20px; font-weight:800; color:#333;">🍮 푸딩대리티켓팅 정품인증</div>
+                    <div style="font-size:11px; color:#d97706; margin-top:4px; font-weight:600;">발급받으신 구매자 이름과 키를 입력해 주세요.</div>
+                </div>
+                <div style="padding:24px; display:flex; flex-direction:column; gap:14px;">
+                    <div>
+                        <label style="font-size:11px; font-weight:700; color:#666; display:block; margin-bottom:4px;">구매자 성함</label>
+                        <input type="text" id="p_input_name" placeholder="예: 홍길동" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:13px; box-sizing:border-box; outline:none;">
+                    </div>
+                    <div>
+                        <label style="font-size:11px; font-weight:700; color:#666; display:block; margin-bottom:4px;">라이선스 키</label>
+                        <input type="text" id="p_input_key" placeholder="XXXX-XXXX-XXXX-XXXX" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:13px; box-sizing:border-box; outline:none; font-family:monospace;">
+                    </div>
+                    <button id="p_btn_submit" style="width:100%; padding:12px; background:#ff9f43; color:#fff; border:none; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer;">정품 인증 및 로그인</button>
+                    <div id="p_login_err" style="color:#ef4444; font-size:11px; text-align:center; font-weight:bold; display:none; margin-top:5px;">⚠️ 라이선스 정보가 일치하지 않거나 삭제되었습니다.</div>
+                </div>
+            </div>
+        \`;
+        document.body.appendChild(overlay);
+
+        document.getElementById('p_btn_submit').onclick = function () {
+            const inputName = document.getElementById('p_input_name').value.trim();
+            const inputKey = document.getElementById('p_input_key').value.trim();
+            const errEl = document.getElementById('p_login_err');
+
+            if (LICENSE_USER.includes(inputName) && inputKey === ACCESS_KEY) {
+                checkLiveLicense(inputName, inputKey, function(isValid) {
+                    if (isValid) {
+                        try {
+                            localStorage.setItem(STORAGE_NAME, inputName);
+                            localStorage.setItem(STORAGE_KEY, inputKey);
+                        } catch (e) {}
+                        overlay.remove();
+                        showLicenseStatusBadge(inputName);
+                        runPuddingCoreEngine();
+                    } else {
+                        errEl.style.display = 'block';
+                    }
+                });
+            } else {
+                errEl.style.display = 'block';
+            }
+        };
+    }
+
+    function runPuddingCoreEngine() {
+        const currentUrl = window.location.href;
+        const isInsidePopup = (window.name && window.name.includes('Popup')) || (window.opener && window.opener !== window);
+        if (isInsidePopup && (currentUrl.includes('/reserve/') || currentUrl.includes('menuIndex=reserve') || currentUrl.includes('SportsBookingInfo'))) return;
+
+        var rid = 'tl-pudding-v10';
+        let ex = document.getElementById(rid);
+        if (ex) ex.remove();
+
+        const box = document.createElement('div');
+        box.id = rid;
+        box.style.cssText = 'position:fixed;right:20px;bottom:20px;width:375px;max-height:450px;overflow:hidden;background:#fff;border:2px solid #ff9f43;border-radius:16px;box-shadow:0 12px 30px rgba(0,0,0,.25);font:14px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto;z-index:2147483646;transition:all 0.3s ease;';
+
+        box.innerHTML = \`
+            <div style='position:relative; text-align:center; padding:14px; background:#FFD9A0; border-bottom:1px solid #f4b860; border-top-left-radius:14px; border-top-right-radius:14px;'>
+                <div style='position:absolute; left:14px; top:50%; transform:translateY(-50%); display:flex; gap:6px;'>
+                    <span id='p_btn_close' title='닫기' style='width:12px; height:12px; background:#ff5f56; border:1px solid #e0443e; border-radius:50%; cursor:pointer; display:inline-block;'></span>
+                    <span id='p_btn_minimize' title='경기목록 접기' style='width:12px; height:12px; background:#ffbd2e; border:1px solid #dea123; border-radius:50%; cursor:pointer; display:inline-block;'></span>
+                    <span id='p_btn_restore' title='경기목록 펼치기' style='width:12px; height:12px; background:#27c93f; border:1px solid #1aab29; border-radius:50%; cursor:pointer; display:inline-block;'></span>
+                </div>
+                <div style='font-size:18px; font-weight:700; color:#333;'>🍮 푸딩 티켓링크 스포츠</div>
+                <div id='p_status' style='font-size:12px; color:#d97706; margin-top:4px; font-weight:bold;'>경기 로딩중</div>
+            </div>
+            <div id='p_body' style='padding:12px; max-height:360px; overflow-y:auto; transition:all 0.3s ease;'>
+                <div style='text-align:center; color:#666; font-size:12px;'><br>정각 전후로 새로고침(F5)을 하시면<br>안전한 홈 경기 예매 버튼이 생성됩니다.</div>
+            </div>
+        \`;
+        document.body.appendChild(box);
+
+        const statusEl = document.getElementById('p_status');
+        const bodyEl   = document.getElementById('p_body');
+
+        document.getElementById('p_btn_close').onclick = function () { box.remove(); };
+        document.getElementById('p_btn_minimize').onclick = function () { bodyEl.style.display = 'none'; };
+        document.getElementById('p_btn_restore').onclick = function () { bodyEl.style.display = 'block'; };
+
+        function getCleanProductId() {
+            const parts = location.pathname.split('/');
+            for (let i = 0; i < parts.length; i++) {
+                if (parts[i] === 'product' && parts[i + 1]) {
+                    return parts[i + 1].replace(/[^0-9]/g, '');
+                }
+            }
+            return '';
+        }
+
+        function findOfficialNetworkData() {
+            const entries = performance.getEntriesByType('resource');
+            return entries.find(e =>
+                e.name.includes('/mapi/sports/schedules') ||
+                e.name.includes('/Contents/Sports/Schedule') ||
+                e.name.includes('/Contents/Sports/SportsBookingInfo') ||
+                (e.name.includes('/sports/api/') && !e.name.includes('/static/'))
+            )?.name || null;
+        }
+
+        function makeSecureButtons(items) {
+            if (!items.length) {
+                bodyEl.innerHTML = "<div style='text-align:center;color:#999;font-size:12px;padding:10px;'>현재 페이지 데이터에 홈 경기가 없습니다.</div>";
+                return;
+            }
+            statusEl.innerText = \`✅ 홈 경기 버튼 로드 완료 (\${items.length}개) 🍮\`;
+            statusEl.style.color = "green";
+            bodyEl.innerHTML = '';
+            const currentOrigin = location.origin;
+
+            items.forEach(it => {
+                const btn = document.createElement('button');
+                btn.style.cssText = 'width:100%; margin-bottom:8px; padding:12px; background:#ff9f43; color:#fff; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:13px; text-align:left; transition:background 0.2s;';
+                btn.innerHTML = \`<span style="color:#fffb00; font-weight:900;">[홈 진입]</span> \${it.title}\`;
+                btn.onmouseenter = function () { btn.style.background = '#e67e22'; };
+                btn.onmouseleave = function () { btn.style.background = '#ff9f43'; };
+
+                let directUrl = \`\${currentOrigin}/reserve/product/\${it.productId}?scheduleId=\${it.id}\`;
+                if (it.signature) directUrl += \`&signature=\${it.signature}\`;
+
+                btn.onclick = function () {
+                    const w = 990, h = 900;
+                    const l = Math.max(0, (window.screen.availWidth - w) / 2);
+                    const t = Math.max(0, (window.screen.availHeight - h) / 2);
+                    const features = \`popup=yes,toolbar=0,location=0,menubar=0,status=0,scrollbars=1,resizable=1,width=\${w},height=\${h},left=\${l},top=\${t}\`;
+                    window.open(directUrl, '_blank', features);
+                };
+                bodyEl.appendChild(btn);
+            });
+        }
+
+        async function sniff() {
+            const officialUrl = findOfficialNetworkData();
+            if (officialUrl) {
+                try {
+                    const r = await fetch(officialUrl, { cache: 'force-cache' });
+                    if (!r.ok) return;
+                    const j = await r.json();
+                    let arr = [
+                        j?.data, j?.data?.schedules, j?.list, j?.content, j?.result, j?.result?.schedules, j?.model
+                    ].find(Array.isArray);
+
+                    if (arr) {
+                        const pidFromUrl = getCleanProductId();
+                        const parsed = arr.map(s => {
+                            const homeTeamName = typeof s.homeTeamName === 'string' ? s.homeTeamName : (s.homeTeam?.teamName || s.homeTeam || '-');
+                            const awayTeamName = typeof s.awayTeamName === 'string' ? s.awayTeamName : (s.awayTeam?.teamName || s.awayTeam || '-');
+                            var hName = (typeof homeTeamName === 'object') ? (homeTeamName.teamName || '-') : homeTeamName;
+                            var aName = (typeof awayTeamName === 'object') ? (awayTeamName.teamName || '-') : awayTeamName;
+                            var titleText = hName + ' vs ' + aName;
+
+                            var rawDate = s.scheduleDate || s.startDateTime || s.date || s.playDate || s.matchDate || '';
+                            if (typeof rawDate === 'string' && rawDate.length === 8 && !isNaN(rawDate)) {
+                                rawDate = rawDate.replace(/(\\d{4})(\\d{2})(\\d{2})/, '$1-$2-$3');
+                            }
+
+                            if (rawDate && (!isNaN(Date.parse(rawDate)) || !isNaN(Number(rawDate)))) {
+                                var dObj = !isNaN(Number(rawDate)) && String(rawDate).length >= 10 ? new Date(Number(rawDate)) : new Date(rawDate);
+                                if (!isNaN(dObj.getTime())) {
+                                    const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
+                                    titleText = (dObj.getMonth() + 1) + '/' + dObj.getDate() + '(' + weekDays[dObj.getDay()] + ') ' + titleText;
+                                }
+                            }
+
+                            let isHomeGame = (s.isHome === true || s.isHome === 'Y' || s.homeYn === 'Y' || s.homeYn === true || s.home === true || s.targetYn === 'Y');
+                            if (!isHomeGame && document.body.innerText.includes(hName)) isHomeGame = true;
+
+                            return {
+                                id: String(s.scheduleId || s.id || s.playSeq),
+                                productId: String(s.productId || s.pid || pidFromUrl),
+                                signature: String(s.signature || s.token || s.hashValue || ''),
+                                title: titleText,
+                                isHome: isHomeGame
+                            };
+                        }).filter(it => it.id && it.isHome);
+
+                        if (parsed.length > 0) {
+                            makeSecureButtons(parsed);
+                            return;
+                        }
+                    }
+                } catch (e) { console.error("푸딩 필터 에러:", e); }
+            }
+            setTimeout(sniff, 200);
+        }
+
+        sniff();
+    }
+
+    function init() {
+        if (window.self !== window.top && location.href.includes('facility.ticketlink.co.kr')) return;
+
+        let savedName = '';
+        let savedKey = '';
+        try {
+            savedName = localStorage.getItem(STORAGE_NAME) || '';
+            savedKey  = localStorage.getItem(STORAGE_KEY) || '';
+        } catch (e) {}
+
+        if (savedName && savedKey && savedKey === ACCESS_KEY && LICENSE_USER.includes(savedName)) {
+            // 접속 시 실시간 DB 차단 여부 체크
+            checkLiveLicense(savedName, savedKey, function(isValid) {
+                if (isValid) {
+                    showLicenseStatusBadge(savedName);
+                    runPuddingCoreEngine();
+                } else {
+                    window.__puddingLogout(true);
+                }
+            });
+        } else {
+            showLoginModal();
+        }
+    }
+
+    init();
+})();`;
+
+async function render() {
+    const db = await getDB();
+    const tbody = document.getElementById('licenseTableBody');
+
+    if (db.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">등록된 라이선스가 없습니다.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = db.map((item) => `
+        <tr>
+            <td><b>${item.name}</b></td>
+            <td>${item.date}</td>
+            <td><span class="code-badge">${item.key}</span></td>
+            <td style="text-align:center;">
+                <button class="btn-copy" onclick="copyCode('${item.name}', '${item.key}')">코드복사</button>
+                <button class="btn-delete" onclick="deleteUser(${item.id})">삭제 (실시간 차단)</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function generateLicense() {
+    const input = document.getElementById('buyerInput');
+    const rawName = input.value.trim();
+    if (!rawName) return alert('이름을 입력하세요');
+
+    const db = await getDB();
+    const count = db.filter(i => i.rawName === rawName).length;
+    const formattedName = count === 0 ? rawName : `${rawName}${count}`;
+
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const p1 = Array.from({length: 4}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    const p2 = Array.from({length: 4}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    const newKey = `TPH2-${p1}-${p2}`;
+
+    const newItem = {
+        id: Date.now(),
+        rawName: rawName,
+        name: formattedName,
+        key: newKey,
+        date: new Date().toLocaleString()
+    };
+
+    db.unshift(newItem);
+    await saveDB(db);
+    input.value = '';
+    render();
+    alert(`✅ [${formattedName}] 발급 완료!\n키: ${newKey}`);
+}
+
+async function deleteUser(id) {
+    if (!confirm('정말 삭제하시겠습니까?\n삭제 즉시 해당 구매자의 프로그램이 실시간 차단됩니다.')) return;
+    let db = await getDB();
+    db = db.filter(i => i.id !== id);
+    await saveDB(db);
+    render();
+}
+
+function copyCode(name, key) {
+    const code = SCRIPT_TEMPLATE.replace('__LICENSE_USER__', name).replace('__ACCESS_KEY__', key);
+    const hidden = document.getElementById('hiddenArea');
+    hidden.style.display = 'block';
+    hidden.value = code;
+    hidden.select();
+    document.execCommand('copy');
+    hidden.style.display = 'none';
+    alert(`📋 [${name}] 전용 완제품 유저스크립트 복사 완료!`);
+}
+
+render();
+</script>
+
+</body>
+</html>
