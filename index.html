@@ -23,6 +23,8 @@
 
         .btn { padding: 10px 18px; background: #ff9f43; color: #fff; border: none; border-radius: 6px; font-weight: bold; font-size: 14px; cursor: pointer; transition: background 0.2s; }
         .btn:hover { background: #e67e22; }
+        .btn-copy { background: #2ed573; color: #fff; font-size: 14px; padding: 8px 16px; }
+        .btn-copy:hover { background: #26af5f; }
         .btn-secondary { background: #7f8c8d; }
         .btn-secondary:hover { background: #95a5a6; }
         .btn-danger { background: #e74c3c; padding: 6px 12px; font-size: 12px; }
@@ -33,9 +35,8 @@
         th { background: #fafafa; font-weight: bold; color: #666; }
         tr:hover { background: #fdfdfd; }
 
-        .code-box { background: #282c34; color: #abb2bf; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin-top: 15px; display: none; }
+        .code-box { background: #282c34; color: #abb2bf; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin-top: 15px; display: none; max-height: 400px; }
         
-        .actions { display: flex; gap: 8px; }
         .loading { text-align: center; color: #888; padding: 20px 0; }
     </style>
 </head>
@@ -63,13 +64,15 @@
         </div>
     </div>
 
-    <!-- 2. 발급 코드 복사 카드 -->
-    <div class="card" id="outputCard" style="display: none;">
+    <!-- 2. 발급 코드 복사 카드 (수정됨: 복사 버튼 강조) -->
+    <div class="card" id="outputCard" style="display: none; border: 2px solid #2ed573;">
         <div class="card-title">
-            <span>📋 스크립트 코드 생성 완료 (원격 로더 적용)</span>
-            <button class="btn btn-secondary" onclick="copyCode()">코드 전체 복사</button>
+            <span>📋 스크립트 코드 생성 완료</span>
+            <button class="btn btn-copy" onclick="copyCode()">📋 코드 전체 복사하기</button>
         </div>
-        <p style="font-size: 13px; color: #666; margin-bottom: 10px;">아래 코드를 복사해서 구매자에게 전달하세요. 메인 로직은 깃허브 원격 서버에서 난독화된 상태로 호출됩니다.</p>
+        <p style="font-size: 13px; color: #666; margin-bottom: 10px;">
+            상단의 <b>[📋 코드 전체 복사하기]</b> 버튼을 누르면 클립보드에 복사됩니다. 구매자에게 그대로 전달해주세요.
+        </p>
         <div class="code-box" id="codeOutput" style="display: block;"></div>
     </div>
 
@@ -106,7 +109,7 @@
     const GIST_URL   = "https://gist.githubusercontent.com/seonyeongb489-create/591e69456c5c6aa19b9fd1a5320cfa3d/raw/73b0852fc9852897c9e2f35f0cb95d03eef07b26/gistfile1.txt";
     // =========================================================================
 
-    // 구매자에게 배포되는 탬퍼몽키 스크립트 템플릿 (원격 메인 로드 방식)
+    // 구매자에게 배포되는 탬퍼몽키 스크립트 템플릿
     const SCRIPT_TEMPLATE = `// ==UserScript==
 // @name         티켓링크스포츠 푸딩 (보안 원격 로더)
 // @namespace    http://tampermonkey.net
@@ -338,12 +341,20 @@
         document.getElementById('userTable').style.display = 'table';
     }
 
+    // 📋 코드 복사 함수
     function copyCode() {
         const codeText = document.getElementById('codeOutput').textContent;
+        if (!codeText) return;
+
         navigator.clipboard.writeText(codeText).then(() => {
-            alert("📋 스크립트 복사가 완료되었습니다! 구매자에게 전달하세요.");
+            alert("✅ 발급된 탬퍼몽키 스크립트 코드가 복사되었습니다!\n구매자에게 그대로 전달하시면 됩니다.");
         }).catch(() => {
-            alert("복사에 실패했습니다. 수동으로 복사하세요.");
+            // 구형 브라우저 등 복사 API 미지원 시 수동 선택 방식
+            const range = document.createRange();
+            range.selectNode(document.getElementById('codeOutput'));
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+            alert("Ctrl+C (또는 Cmd+C)를 눌러 직접 복사해주세요.");
         });
     }
 
