@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🍮 푸딩 스니퍼 - 라이선스 발급 및 관리자 콘솔 (원격 로딩 적용판)</title>
+    <title>🍮 푸딩 - 라이선스 발급 및 관리자 </title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: #f4f6f8; color: #333; padding: 30px 15px; }
@@ -27,6 +27,8 @@
         .btn-secondary:hover { background: #95a5a6; }
         .btn-danger { background: #e74c3c; padding: 6px 12px; font-size: 12px; }
         .btn-danger:hover { background: #c0392b; }
+        .btn-copy { background: #3498db; padding: 6px 12px; font-size: 12px; margin-right: 4px; }
+        .btn-copy:hover { background: #2980b9; }
 
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
@@ -76,7 +78,7 @@
                     <th>라이선스 키</th>
                     <th>메모</th>
                     <th>발급일</th>
-                    <th>관리</th>
+                    <th>관리 / 복사</th>
                 </tr>
             </thead>
             <tbody id="userTableBody"></tbody>
@@ -89,7 +91,10 @@
     // 🔑 JSONBin 연동 설정
     // =========================================================================
     const JSONBIN_KEY = "$2a$10$DfYID08mgpZiaE1025C5kugvnH/xz68pLrVrq1sR39Kookrz4ITqu"; 
-    const BIN_ID     = "6a60c3d0da38895dfe7f75bb";            
+    const BIN_ID      = "6a60c3d0da38895dfe7f75bb";            
+    
+    // 🔗 고정된 파일 다운로드 주소
+    const FIXED_DOWNLOAD_URL = "https://drive.google.com/file/d/1X7UJcNJmyNEr-XGUqugWq7E9AFg_bbjL/view";
     // =========================================================================
 
     let currentUserList = [];
@@ -183,6 +188,23 @@
         await saveUsersToServer(updatedList);
     }
 
+    // 📋 유저 정보 복사 함수 (구매자명, 라이선스키, 고정 주소 조합)
+    function copyUserInfo(name, key, btnElement) {
+        const textToCopy = `구매자명: ${name}\n라이선스키: ${key}\n\n파일 다운주소: ${FIXED_DOWNLOAD_URL}`;
+
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            const originalText = btnElement.textContent;
+            btnElement.textContent = '복사완료!';
+            btnElement.style.background = '#2ecc71';
+            setTimeout(() => {
+                btnElement.textContent = originalText;
+                btnElement.style.background = '#3498db';
+            }, 1500);
+        }).catch(err => {
+            alert("복사 실패: " + err);
+        });
+    }
+
     function renderUserTable() {
         const tbody = document.getElementById('userTableBody');
         tbody.innerHTML = '';
@@ -200,6 +222,7 @@
                     <td>${user.memo || '-'}</td>
                     <td>${user.date}</td>
                     <td>
+                        <button class="btn btn-copy" onclick="copyUserInfo('${user.name}', '${user.key}', this)">정보복사</button>
                         <button class="btn btn-danger" onclick="deleteUser(${user.id})">삭제</button>
                     </td>
                 `;
