@@ -54,8 +54,8 @@
 
 <script>
 // ⚠️ 발급받으신 2개 키를 넣어주세요!
-const JSONBIN_KEY = "$2a$10$DfYID08mgpZiaE1025C5kugvnH/xz68pLrVrq1sR39Kookrz4ITqu "; // Master Key ($2a$10$...)
-const BIN_ID = "6a60c3d0da38895dfe7f75bb";           // Bin ID (65a...)
+const JSONBIN_KEY = "YOUR_JSONBIN_KEY"; // Master Key ($2a$10$...)
+const BIN_ID = "YOUR_BIN_ID";           // Bin ID (65a...)
 
 const API_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 
@@ -77,12 +77,13 @@ async function saveDB(data) {
     });
 }
 
-// 🎯 [실시간 차단 기능 + macOS 신호등 풀버전 스크립트 템플릿]
+// 🎯 [요청하신 macOS 컨트롤러 완벽 스크립트 템플릿]
 const SCRIPT_TEMPLATE = `// ==UserScript==
-// @name         티켓링크스포츠 푸딩 (macOS 신호등 버튼 + DB 실시간 차단 탑재판)
+// @name         티켓링크스포츠 푸딩 (macOS 신호등 버튼 컨트롤러 탑재판)
 // @namespace    http://tampermonkey.net
-// @version      3.0
-// @description  실시간 DB 연동 정품 인증 + macOS 스타일 컨트롤러 스니퍼
+// @version      1.1
+// @description  localStorage 인증 + macOS 스타일 (🔴닫기/🟡최소화/🟢복구) 컨트롤러가 적용된 스니퍼
+// @author       Pudding
 // @match        *://*.ticketlink.co.kr/*
 // @match        *://facility.ticketlink.co.kr/*
 // @grant        GM_xmlhttpRequest
@@ -92,11 +93,15 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
 (function () {
     'use strict';
 
+    // =========================================================================
+    // 🔑 [판매자 전용 설정 구역] - 구매자에 맞게 이 2개만 수정해서 전달하세요!
+    // =========================================================================
+    const LICENSE_USER = "__LICENSE_USER__"; // 1. 구매자 정보 (유출 시 추적용)
+    const ACCESS_KEY   = "__ACCESS_KEY__";   // 2. 이 유저 전용 라이선스 키
+    // =========================================================================
+
     const BIN_ID = "${BIN_ID}";
     const JSONBIN_KEY = "${JSONBIN_KEY}";
-    
-    const LICENSE_USER = "__LICENSE_USER__";
-    const ACCESS_KEY   = "__ACCESS_KEY__";
 
     const STORAGE_NAME = 'pudding_user_name_ls';
     const STORAGE_KEY  = 'pudding_user_key_ls';
@@ -119,7 +124,7 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
         });
     }
 
-    // 🔒 로그아웃 / 차단 처리
+    // 🔒 로그아웃 처리 함수
     window.__puddingLogout = function (isBlocked = false) {
         try {
             localStorage.removeItem(STORAGE_NAME);
@@ -133,6 +138,7 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
         location.reload();
     };
 
+    // 🌟 상단 "OOO님 인증 완료" 안내 배지 UI
     function showLicenseStatusBadge(clientName) {
         if (document.getElementById('pudding-license-badge')) return;
 
@@ -141,12 +147,14 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
 
         const currentUrl = window.location.href;
         const isInsidePopup = (window.name && window.name.includes('Popup')) || (window.opener && window.opener !== window);
-        if (isInsidePopup && (currentUrl.includes('/reserve/') || currentUrl.includes('menuIndex=reserve'))) return;
+        if (isInsidePopup && (currentUrl.includes('/reserve/') || currentUrl.includes('menuIndex=reserve'))) {
+            return; // 예매 팝업 내부에서는 배지를 숨김
+        }
 
         badge.style.cssText = 'position:fixed;top:10px;right:20px;z-index:2147483647;background:linear-gradient(135deg, #ff9f43, #e67e22);color:#fff;padding:10px 18px;border-radius:10px;font:600 12px -apple-system,Pretendard,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.25);display:flex;align-items:center;gap:10px;';
         badge.innerHTML = \`
             <span>✅ 정품 인증 유저: <b style="text-decoration:underline;">\${clientName}</b></span>
-            <button id="p_badge_logout" style="padding:2px 8px; background:#fff; border:none; border-radius:4px; font-size:10px; font-weight:bold; cursor:pointer; color:#e67e22;">로그아웃</button>
+            <button id="p_badge_logout" style="padding:2px 8px; background:#fff; border:none; border-radius:4px; font-size:10px; font-weight:bold; cursor:pointer; color:#e67e22; transition:all 0.2s;">로그아웃</button>
         \`;
 
         document.body.appendChild(badge);
@@ -158,6 +166,7 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
         };
     }
 
+    // 🔒 최초 1회 로그인 모달 UI
     function showLoginModal() {
         if (document.getElementById('pudding-login-overlay')) return;
 
@@ -165,7 +174,7 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
         overlay.id = 'pudding-login-overlay';
         overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.65);display:flex;justify-content:center;align-items:center;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;';
         overlay.innerHTML = \`
-            <div style="width:360px; background:#fff; border-radius:16px; box-shadow:0 15px 35px rgba(0,0,0,0.3); overflow:hidden;">
+            <div style="width:360px; background:#fff; border-radius:16px; box-shadow:0 15px 35px rgba(0,0,0,0.3); overflow:hidden; animation: puddingFade 0.3s ease;">
                 <div style="text-align:center; padding:24px; background:#FFD9A0; border-bottom:1px solid #f4b860;">
                     <div style="font-size:20px; font-weight:800; color:#333;">🍮 푸딩대리티켓팅 정품인증</div>
                     <div style="font-size:11px; color:#d97706; margin-top:4px; font-weight:600;">발급받으신 구매자 이름과 키를 입력해 주세요.</div>
@@ -179,10 +188,14 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
                         <label style="font-size:11px; font-weight:700; color:#666; display:block; margin-bottom:4px;">라이선스 키</label>
                         <input type="text" id="p_input_key" placeholder="XXXX-XXXX-XXXX-XXXX" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:13px; box-sizing:border-box; outline:none; font-family:monospace;">
                     </div>
-                    <button id="p_btn_submit" style="width:100%; padding:12px; background:#ff9f43; color:#fff; border:none; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer;">정품 인증 및 로그인</button>
+                    <button id="p_btn_submit" style="width:100%; padding:12px; background:#ff9f43; color:#fff; border:none; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer; margin-top:6px; transition:background 0.2s;">정품 인증 및 로그인</button>
                     <div id="p_login_err" style="color:#ef4444; font-size:11px; text-align:center; font-weight:bold; display:none; margin-top:5px;">⚠️ 라이선스 정보가 일치하지 않거나 삭제되었습니다.</div>
                 </div>
             </div>
+            <style>
+                @keyframes puddingFade { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+                #p_btn_submit:hover { background: #e67e22; }
+            </style>
         \`;
         document.body.appendChild(overlay);
 
@@ -199,6 +212,7 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
                             localStorage.setItem(STORAGE_KEY, inputKey);
                         } catch (e) {}
                         overlay.remove();
+
                         showLicenseStatusBadge(inputName);
                         runPuddingCoreEngine();
                     } else {
@@ -211,10 +225,15 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
         };
     }
 
+    // =========================================================================
+    // 🍮 [푸딩 메인 스니핑 엔진]
+    // =========================================================================
     function runPuddingCoreEngine() {
         const currentUrl = window.location.href;
         const isInsidePopup = (window.name && window.name.includes('Popup')) || (window.opener && window.opener !== window);
-        if (isInsidePopup && (currentUrl.includes('/reserve/') || currentUrl.includes('menuIndex=reserve') || currentUrl.includes('SportsBookingInfo'))) return;
+        if (isInsidePopup && (currentUrl.includes('/reserve/') || currentUrl.includes('menuIndex=reserve') || currentUrl.includes('SportsBookingInfo'))) {
+            return;
+        }
 
         var rid = 'tl-pudding-v10';
         let ex = document.getElementById(rid);
@@ -224,8 +243,10 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
         box.id = rid;
         box.style.cssText = 'position:fixed;right:20px;bottom:20px;width:375px;max-height:450px;overflow:hidden;background:#fff;border:2px solid #ff9f43;border-radius:16px;box-shadow:0 12px 30px rgba(0,0,0,.25);font:14px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto;z-index:2147483646;transition:all 0.3s ease;';
 
+        // 🔴🟡🟢 macOS 스타일 버튼 탑재 헤더 HTML
         box.innerHTML = \`
             <div style='position:relative; text-align:center; padding:14px; background:#FFD9A0; border-bottom:1px solid #f4b860; border-top-left-radius:14px; border-top-right-radius:14px;'>
+                <!-- 3색 신호등 버튼 구역 -->
                 <div style='position:absolute; left:14px; top:50%; transform:translateY(-50%); display:flex; gap:6px;'>
                     <span id='p_btn_close' title='닫기' style='width:12px; height:12px; background:#ff5f56; border:1px solid #e0443e; border-radius:50%; cursor:pointer; display:inline-block;'></span>
                     <span id='p_btn_minimize' title='경기목록 접기' style='width:12px; height:12px; background:#ffbd2e; border:1px solid #dea123; border-radius:50%; cursor:pointer; display:inline-block;'></span>
@@ -243,9 +264,20 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
         const statusEl = document.getElementById('p_status');
         const bodyEl   = document.getElementById('p_body');
 
-        document.getElementById('p_btn_close').onclick = function () { box.remove(); };
-        document.getElementById('p_btn_minimize').onclick = function () { bodyEl.style.display = 'none'; };
-        document.getElementById('p_btn_restore').onclick = function () { bodyEl.style.display = 'block'; };
+        // 🔴 닫기 버튼 이벤트
+        document.getElementById('p_btn_close').onclick = function () {
+            box.remove();
+        };
+
+        // 🟡 접기 (경기 목록 안보이게 최소화) 이벤트
+        document.getElementById('p_btn_minimize').onclick = function () {
+            bodyEl.style.display = 'none';
+        };
+
+        // 🟢 펼치기 (경기 목록 다시 보이기) 이벤트
+        document.getElementById('p_btn_restore').onclick = function () {
+            bodyEl.style.display = 'block';
+        };
 
         function getCleanProductId() {
             const parts = location.pathname.split('/');
@@ -259,12 +291,13 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
 
         function findOfficialNetworkData() {
             const entries = performance.getEntriesByType('resource');
-            return entries.find(e =>
+            const targetEntry = entries.find(e =>
                 e.name.includes('/mapi/sports/schedules') ||
                 e.name.includes('/Contents/Sports/Schedule') ||
                 e.name.includes('/Contents/Sports/SportsBookingInfo') ||
                 (e.name.includes('/sports/api/') && !e.name.includes('/static/'))
-            )?.name || null;
+            );
+            return targetEntry ? targetEntry.name : null;
         }
 
         function makeSecureButtons(items) {
@@ -285,7 +318,9 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
                 btn.onmouseleave = function () { btn.style.background = '#ff9f43'; };
 
                 let directUrl = \`\${currentOrigin}/reserve/product/\${it.productId}?scheduleId=\${it.id}\`;
-                if (it.signature) directUrl += \`&signature=\${it.signature}\`;
+                if (it.signature) {
+                    directUrl += \`&signature=\${it.signature}\`;
+                }
 
                 btn.onclick = function () {
                     const w = 990, h = 900;
@@ -305,20 +340,36 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
                     const r = await fetch(officialUrl, { cache: 'force-cache' });
                     if (!r.ok) return;
                     const j = await r.json();
-                    let arr = [
-                        j?.data, j?.data?.schedules, j?.list, j?.content, j?.result, j?.result?.schedules, j?.model
-                    ].find(Array.isArray);
+                    let arr = null;
+
+                    const cand = [
+                        j && j.data,
+                        j && j.data && j.data.schedules,
+                        j && j.list,
+                        j && j.content,
+                        j && j.result,
+                        j && j.result && j.result.schedules,
+                        j && j.model
+                    ];
+
+                    for (let i = 0; i < cand.length; i++) {
+                        if (Array.isArray(cand[i])) {
+                            arr = cand[i];
+                            break;
+                        }
+                    }
 
                     if (arr) {
                         const pidFromUrl = getCleanProductId();
                         const parsed = arr.map(s => {
-                            const homeTeamName = typeof s.homeTeamName === 'string' ? s.homeTeamName : (s.homeTeam?.teamName || s.homeTeam || '-');
-                            const awayTeamName = typeof s.awayTeamName === 'string' ? s.awayTeamName : (s.awayTeam?.teamName || s.awayTeam || '-');
+                            const homeTeamName = typeof s.homeTeamName === 'string' ? s.homeTeamName : (s.homeTeam && s.homeTeam.teamName) || s.homeTeam || '-';
+                            const awayTeamName = typeof s.awayTeamName === 'string' ? s.awayTeamName : (s.awayTeam && s.awayTeam.teamName) || s.awayTeam || '-';
                             var hName = (typeof homeTeamName === 'object') ? (homeTeamName.teamName || '-') : homeTeamName;
                             var aName = (typeof awayTeamName === 'object') ? (awayTeamName.teamName || '-') : awayTeamName;
                             var titleText = hName + ' vs ' + aName;
 
                             var rawDate = s.scheduleDate || s.startDateTime || s.date || s.playDate || s.matchDate || '';
+
                             if (typeof rawDate === 'string' && rawDate.length === 8 && !isNaN(rawDate)) {
                                 rawDate = rawDate.replace(/(\\d{4})(\\d{2})(\\d{2})/, '$1-$2-$3');
                             }
@@ -327,12 +378,21 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
                                 var dObj = !isNaN(Number(rawDate)) && String(rawDate).length >= 10 ? new Date(Number(rawDate)) : new Date(rawDate);
                                 if (!isNaN(dObj.getTime())) {
                                     const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
-                                    titleText = (dObj.getMonth() + 1) + '/' + dObj.getDate() + '(' + weekDays[dObj.getDay()] + ') ' + titleText;
+                                    var month = dObj.getMonth() + 1;
+                                    var date = dObj.getDate();
+                                    var dayOfWeek = weekDays[dObj.getDay()];
+                                    titleText = month + '/' + date + '(' + dayOfWeek + ') ' + titleText;
                                 }
+                            } else {
+                                var fallbackDate = new Date();
+                                const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
+                                titleText = (fallbackDate.getMonth() + 1) + '/' + fallbackDate.getDate() + '(' + weekDays[fallbackDate.getDay()] + ') ' + titleText;
                             }
 
                             let isHomeGame = (s.isHome === true || s.isHome === 'Y' || s.homeYn === 'Y' || s.homeYn === true || s.home === true || s.targetYn === 'Y');
-                            if (!isHomeGame && document.body.innerText.includes(hName)) isHomeGame = true;
+                            if (!isHomeGame && document.body.innerText.includes(hName)) {
+                                isHomeGame = true;
+                            }
 
                             return {
                                 id: String(s.scheduleId || s.id || s.playSeq),
@@ -348,7 +408,9 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
                             return;
                         }
                     }
-                } catch (e) { console.error("푸딩 필터 에러:", e); }
+                } catch (e) {
+                    console.error("푸딩 스니핑 필터 에러:", e);
+                }
             }
             setTimeout(sniff, 200);
         }
@@ -356,8 +418,11 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
         sniff();
     }
 
+    // 🚀 초기 인증 진입점
     function init() {
-        if (window.self !== window.top && location.href.includes('facility.ticketlink.co.kr')) return;
+        if (window.self !== window.top && location.href.includes('facility.ticketlink.co.kr')) {
+            return;
+        }
 
         let savedName = '';
         let savedKey = '';
@@ -367,7 +432,6 @@ const SCRIPT_TEMPLATE = `// ==UserScript==
         } catch (e) {}
 
         if (savedName && savedKey && savedKey === ACCESS_KEY && LICENSE_USER.includes(savedName)) {
-            // 접속 시 실시간 DB 차단 여부 체크
             checkLiveLicense(savedName, savedKey, function(isValid) {
                 if (isValid) {
                     showLicenseStatusBadge(savedName);
